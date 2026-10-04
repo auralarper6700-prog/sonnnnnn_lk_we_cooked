@@ -74,16 +74,6 @@ or:
 
     {{range .Postings}}{{.Title}} - {{.Body}}{{end}}
 
-DO NOT:
-- brute-force the PIN
-- brute-force thousands of template fields
-- attack the SSH host
-- use the portal as a proxy
-- try to attack the loopback service mentioned in the SRE posting
-- waste time trying to mutate `.Role` into `staff`
-
-The goal is to read information already exposed through the template context.
-
 HOW I WANT YOU TO HELP:
 
 Act as my CTF teammate.
